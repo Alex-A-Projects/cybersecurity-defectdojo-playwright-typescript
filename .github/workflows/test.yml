@@ -1,0 +1,164 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) TypeScript compiles cleanly across all three suites.
+  # ---------------------------------------------------------------------------
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+
+  # ---------------------------------------------------------------------------
+  # 2) DB suite — runs offline against the local postgres:16 container.
+  # Requires `npm run db:up` to start the container before this job; CI runs
+  # the container as a service.
+  # ---------------------------------------------------------------------------
+  db:
+    name: DB suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: defectdojo
+          POSTGRES_PASSWORD: defectdojo
+          POSTGRES_DB: defectdojo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U defectdojo -d defectdojo"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      TEST_ENV: demo
+      DD_DB_HOST: localhost
+      DD_DB_PORT: '5432'
+      DD_DB_NAME: defectdojo
+      DD_DB_USER: defectdojo
+      DD_DB_PASSWORD: defectdojo
+      DD_DB_SSL: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Wait for DB
+        run: |
+          for i in $(seq 1 30); do
+            if (echo > /dev/tcp/localhost/5432) 2>/dev/null; then
+              echo "DB is reachable"; exit 0
+            fi
+            sleep 1
+          done
+          echo "DB did not become reachable"
+          exit 1
+      - run: npx playwright test --config=playwright.db.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results-db
+          path: allure-results-db/
+
+  # ---------------------------------------------------------------------------
+  # 3) API suite — talks to the demo sandbox. Only runs when the secret
+  #    DEMO_API_URL is configured (sandbox availability is not a CI gate).
+  # ---------------------------------------------------------------------------
+  api:
+    name: API suite
+    runs-on: ubuntu-latest
+    needs: typecheck
+    if: ${{ env.DEMO_API_URL != '' }}
+    env:
+      TEST_ENV: demo
+      DEMO_API_URL: ${{ vars.DEMO_API_URL }}
+      TEST_USER: ${{ secrets.DD_TEST_USER }}
+      TEST_PASSWORD: ${{ secrets.DD_TEST_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run framework-level smoke (always)
+        run: npx playwright test --config=playwright.api.config.ts tests-api/_framework
+      - name: Run full API suite
+        run: npx playwright test --config=playwright.api.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results-api
+          path: allure-results-api/
+
+  # ---------------------------------------------------------------------------
+  # 4) UI suite — talks to the demo sandbox. Same conditional as API.
+  # ---------------------------------------------------------------------------
+  ui:
+    name: UI suite
+    runs-on: ubuntu-latest
+    needs: typecheck
+    if: ${{ env.DEMO_API_URL != '' }}
+    env:
+      TEST_ENV: demo
+      DEMO_BASE_URL: ${{ vars.DEMO_BASE_URL }}
+      DEMO_API_URL: ${{ vars.DEMO_API_URL }}
+      TEST_USER: ${{ secrets.DD_TEST_USER }}
+      TEST_PASSWORD: ${{ secrets.DD_TEST_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Run framework-level smoke (always)
+        run: npx playwright test --config=playwright.ui.config.ts tests-ui/_framework
+      - name: Run full UI suite
+        run: npx playwright test --config=playwright.ui.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results-ui
+          path: allure-results-ui/
+
+  # ---------------------------------------------------------------------------
+  # 5) Code review (severity-rated) — runs on PR only.
+  # ---------------------------------------------------------------------------
+  code-review:
+    name: Code review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run /skill-code-review
+        run: echo "Invoke /skill-code-review against the PR diff in Claude Code."

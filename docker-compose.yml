@@ -1,0 +1,37 @@
+name: defectdojo-tests
+
+# =============================================================================
+# Database for the DB suite.
+# Pin to postgres:16 (matches confirmed DefectDojo production target version).
+# Version drift from production is a defect — call it out in the report.
+# =============================================================================
+services:
+  defectdojo-db:
+    image: postgres:16
+    container_name: defectdojo-tests-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DD_DB_USER:-defectdojo}
+      POSTGRES_PASSWORD: ${DD_DB_PASSWORD:-defectdojo}
+      POSTGRES_DB: ${DD_DB_NAME:-defectdojo}
+    ports:
+      # Default the HOST port to 55432 because Mac users routinely have
+      # Homebrew or leftover Postgres containers already bound to the
+      # conventional 5432 / 5433 ports. Override in `.env` if you have
+      # 55432 free and want a different mapping.
+      - "${DD_DB_PORT:-55432}:5432"
+    volumes:
+      - defectdojo-db-data:/var/lib/postgresql/data
+      # Seed directory — mount optional init scripts. The container's
+      # docker-entrypoint-initdb.d executes these on FIRST start (when the
+      # volume is empty).
+      - ./tests-db/fixtures/seed:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DD_DB_USER:-defectdojo} -d ${DD_DB_NAME:-defectdojo}"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  defectdojo-db-data:

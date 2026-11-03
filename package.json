@@ -1,0 +1,52 @@
+{
+  "name": "defectdojo-tests",
+  "version": "0.1.0",
+  "description": "UI + API + DB test automation for DefectDojo (vulnerability management platform). TypeScript + Playwright, three suites sharing src/shared.",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test --config=playwright.ui.config.ts",
+    "test:ui": "playwright test --config=playwright.ui.config.ts",
+    "test:api": "playwright test --config=playwright.api.config.ts",
+    "test:db": "playwright test --config=playwright.db.config.ts",
+    "test:all": "playwright test",
+    "test:smoke": "playwright test --config=playwright.ui.config.ts --grep @smoke",
+    "db:up": "docker compose up -d defectdojo-db",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f defectdojo-db",
+    "db:shell": "docker compose exec defectdojo-db psql -U ${DD_DB_USER:-defectdojo} -d ${DD_DB_NAME:-defectdojo}",
+    "db:wait": "node -e \"require('dotenv').config(); require('child_process').execSync('docker compose up -d defectdojo-db', {stdio:'inherit'}); const {Client}=require('pg'); const c=new Client({host:process.env.DD_DB_HOST||'localhost',port:Number(process.env.DD_DB_PORT||55432),user:process.env.DD_DB_USER||'defectdojo',password:process.env.DD_DB_PASSWORD||'defectdojo',database:process.env.DD_DB_NAME||'defectdojo'}); let i=0;(async()=>{while(i++<60){try{await c.connect();await c.query('SELECT 1');await c.end();console.log('DB ready');return;}catch{await new Promise(r=>setTimeout(r,1000));}}throw new Error('DB not ready after 60s');})();\"",
+    "allure:generate:ui": "allure generate allure-results-ui --clean -o allure-report-ui",
+    "allure:generate:api": "allure generate allure-results-api --clean -o allure-report-api",
+    "allure:generate:db": "allure generate allure-results-db --clean -o allure-report-db",
+    "allure:open:ui": "allure open allure-report-ui",
+    "allure:open:api": "allure open allure-report-api",
+    "allure:open:db": "allure open allure-report-db",
+    "allure:serve:ui": "allure serve allure-results-ui",
+    "allure:serve:api": "allure serve allure-results-api",
+    "allure:serve:db": "allure serve allure-results-db"
+  },
+  "keywords": [
+    "playwright",
+    "typescript",
+    "defectdojo",
+    "vulnerability-management",
+    "ui-testing",
+    "api-testing",
+    "db-testing",
+    "allure"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.1",
+    "@types/pg": "^8.11.10",
+    "allure-playwright": "^3.9.0",
+    "dotenv": "^17.4.2",
+    "pg": "^8.13.1",
+    "typescript": "^5.6.3",
+    "zod": "^3.23.8"
+  }
+}

@@ -1,0 +1,5 @@
+# Local-only overrides. Committed so the team runs the same setup;
+# `docker compose up` automatically merges this over docker-compose.yml.
+#
+# Currently empty: keep it that way unless you need per-developer tweaks.
+services: {}

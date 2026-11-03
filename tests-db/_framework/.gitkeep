@@ -1,0 +1,10 @@
+# Placeholder so the directory survives `git init`.
+#
+# Capture DefectDojo schema + minimal demo data here as initdb.sql:
+#
+#   pg_dump \
+#     --schema=public --no-owner --no-privileges --no-tablespace --no-security-labels \
+#     -h demo.defectdojo.org -p 5432 -U defectdojo -d defectdojo \
+#     > tests-db/fixtures/seed/initdb.sql
+#
+# Then commit with `git add -f tests-db/fixtures/seed/initdb.sql`.

@@ -1,0 +1,25 @@
+{
+  "envs": {
+    "demo": {
+      "features": {
+        "auth": true,
+        "products": true,
+        "engagements": true,
+        "findings": true,
+        "users": true,
+        "reports": true,
+        "notes": true,
+        "risk_acceptance": true,
+        "components": true,
+        "endpoints": true,
+        "metrics": true,
+        "calendar": true,
+        "questionnaires": true,
+        "configuration": true,
+        "jira_integration": false,
+        "azure_devops_integration": false,
+        "sso": false
+      }
+    }
+  }
+}
