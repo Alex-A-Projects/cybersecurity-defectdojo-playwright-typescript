@@ -4,16 +4,23 @@
  * Runs once before any DB suite spec:
  *   1. Loads the .env (side-effect: env.db.* populated).
  *   2. Waits for the Postgres container's healthcheck.
- *   3. Optionally applies tests-db/fixtures/seed/initdb.sql if it exists.
+ *   3. Applies tests-db/fixtures/seed/initdb.sql if the schema is missing.
  *
- * If initdb.sql is missing, no-op and log a TODO(confirm) note — the
- * framework's schema-exists smoke spec still runs against the empty container.
+ * The schema has to exist before the first spec runs: the specs assert
+ * against seeded reference rows (the 'Other' ProductType, the 'Default SLA'
+ * row, the admin user), and the factories rely on those ids.
+ *
+ * Locally, `docker-compose.yml` mounts the seed into
+ * `/docker-entrypoint-initdb.d` so Postgres applies it on first init — the
+ * check below then finds the schema present and skips the load. In CI the
+ * `postgres:16` service container has no such mount, so the seed is applied
+ * from here.
  */
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-import * as fs from 'fs';
 
 import { dbReady } from '../../src/db/clients/healthcheck.client';
+import { applySeed, schemaPresent } from '../../src/db/clients/seed.client';
 import { Paths } from '../../src/shared/paths';
 
 export default async function globalSetup(): Promise<void> {
@@ -27,15 +34,16 @@ export default async function globalSetup(): Promise<void> {
   }
 
   const seedFile = Paths.dbSeedFile;
-  if (fs.existsSync(seedFile)) {
-    console.log(`[db-suite] Loading seed file ${path.relative(process.cwd(), seedFile)}…`);
-    // The actual LOAD is performed per-fixture or per-spec; global setup
-    // just verifies the file exists so a stuck setup fails fast.
+  const present = await schemaPresent('dojo_product');
+
+  if (present) {
+    console.log('[db-suite] Schema already present — skipping seed load.');
+  } else if (await applySeed(seedFile)) {
+    console.log(`[db-suite] Applied seed file ${path.relative(process.cwd(), seedFile)}.`);
   } else {
-    console.log(
-      `[db-suite] No seed file at tests-db/fixtures/seed/initdb.sql — running only against the empty container. ` +
-      `Framework smokes still run; data-driven specs skip. ` +
-      `TODO(confirm): capture via 'pg_dump' from the demo sandbox (see README §3).`,
+    throw new Error(
+      `Schema is absent and no seed file at ${seedFile}. ` +
+      `The DB suite needs the DefectDojo schema; see README §3 for how to capture it.`,
     );
   }
 
