@@ -7,6 +7,9 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 const TEST_ENV = (process.env.TEST_ENV ?? 'demo').toLowerCase();
 
 // ── Frontend / UI base URLs ────────────────────────────────────────────
+// Read lazily (inside the getter below) rather than at module load, so a
+// suite that never talks HTTP — the DB suite imports this module for its
+// `env.db` config only — does not fail on a missing DEMO_BASE_URL.
 const UI_BASE_URL_BY_ENV: Record<string, string | undefined> = {
   demo: process.env.DEMO_BASE_URL,
 };
@@ -21,7 +24,7 @@ function pickBaseUrl(
     const known = Object.keys(map).join(', ');
     throw new Error(
       `No ${family} base URL resolved for TEST_ENV="${envName}". ` +
-      `Set ${envName.toUpperCase()}_${family}_BASE_URL (or pick one of: ${known}).`,
+      `Set DEMO_${family === 'UI' ? 'BASE' : 'API'}_URL (or pick one of: ${known}).`,
     );
   }
   return url;
@@ -57,13 +60,26 @@ function readDbConfig(): DbConfig {
 
 export const env = {
   testEnv: TEST_ENV,
-  uiBaseURL: pickBaseUrl(UI_BASE_URL_BY_ENV, TEST_ENV, 'UI'),
   cookieDomain,
   testUser: process.env.TEST_USER ?? '',
   testPassword: process.env.TEST_PASSWORD ?? '',
-  apiBaseURL: pickBaseUrl(API_BASE_URL_BY_ENV, TEST_ENV, 'API'),
   db: readDbConfig(),
   testTimeoutMs: Number(process.env.TEST_TIMEOUT ?? 30000),
+
+  /**
+   * Frontend base URL. Resolved on access, not at import — the DB suite
+   * imports this module for `env.db` only and must not require DEMO_BASE_URL.
+   */
+  get uiBaseURL(): string {
+    return pickBaseUrl(UI_BASE_URL_BY_ENV, TEST_ENV, 'UI');
+  },
+
+  /**
+   * Backend base URL. Resolved on access for the same reason as `uiBaseURL`.
+   */
+  get apiBaseURL(): string {
+    return pickBaseUrl(API_BASE_URL_BY_ENV, TEST_ENV, 'API');
+  },
 } as const;
 
 /**
